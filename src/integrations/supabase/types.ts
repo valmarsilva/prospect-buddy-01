@@ -70,6 +70,59 @@ export type Database = {
           },
         ]
       }
+      outreach_logs: {
+        Row: {
+          arquivo_nome: string | null
+          arquivo_url: string | null
+          canal: string
+          created_at: string
+          email_destino: string | null
+          enviado_email: boolean | null
+          enviado_whatsapp: boolean | null
+          id: string
+          lead_id: string
+          mensagem: string
+          proposta_ia: string | null
+          status: string
+        }
+        Insert: {
+          arquivo_nome?: string | null
+          arquivo_url?: string | null
+          canal: string
+          created_at?: string
+          email_destino?: string | null
+          enviado_email?: boolean | null
+          enviado_whatsapp?: boolean | null
+          id?: string
+          lead_id: string
+          mensagem: string
+          proposta_ia?: string | null
+          status?: string
+        }
+        Update: {
+          arquivo_nome?: string | null
+          arquivo_url?: string | null
+          canal?: string
+          created_at?: string
+          email_destino?: string | null
+          enviado_email?: boolean | null
+          enviado_whatsapp?: boolean | null
+          id?: string
+          lead_id?: string
+          mensagem?: string
+          proposta_ia?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outreach_logs_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       search_history: {
         Row: {
           cidade: string | null
