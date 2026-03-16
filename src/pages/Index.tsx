@@ -101,6 +101,10 @@ const Index = () => {
               <Database className="h-4 w-4" />
               Leads Salvos
             </TabsTrigger>
+            <TabsTrigger value="history" className="gap-2">
+              <History className="h-4 w-4" />
+              Histórico de Envios
+            </TabsTrigger>
           </TabsList>
 
           {/* TAB: Buscar */}
