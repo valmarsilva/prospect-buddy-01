@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Download, Search, Database } from "lucide-react";
+import { Download, Search, Database, History } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,6 +11,7 @@ import {
 import { SearchBar } from "@/components/SearchBar";
 import { MetricCards } from "@/components/MetricCards";
 import { LeadsTable } from "@/components/LeadsTable";
+import { OutreachHistory } from "@/components/OutreachHistory";
 import {
   searchLeads, getSavedLeads, updateLeadStatus, exportToCSV,
   type Lead,
@@ -100,6 +101,10 @@ const Index = () => {
               <Database className="h-4 w-4" />
               Leads Salvos
             </TabsTrigger>
+            <TabsTrigger value="history" className="gap-2">
+              <History className="h-4 w-4" />
+              Histórico de Envios
+            </TabsTrigger>
           </TabsList>
 
           {/* TAB: Buscar */}
@@ -171,6 +176,11 @@ const Index = () => {
               showStatusControl
               onStatusChange={(id, status) => statusMutation.mutate({ id, status })}
             />
+          </TabsContent>
+
+          {/* TAB: Histórico */}
+          <TabsContent value="history" className="space-y-6">
+            <OutreachHistory />
           </TabsContent>
         </Tabs>
       </main>
