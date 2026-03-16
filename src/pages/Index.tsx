@@ -11,6 +11,7 @@ import {
 import { SearchBar } from "@/components/SearchBar";
 import { MetricCards } from "@/components/MetricCards";
 import { LeadsTable } from "@/components/LeadsTable";
+import { OutreachHistory } from "@/components/OutreachHistory";
 import {
   searchLeads, getSavedLeads, updateLeadStatus, exportToCSV,
   type Lead,
