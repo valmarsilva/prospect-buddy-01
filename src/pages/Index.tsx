@@ -177,6 +177,11 @@ const Index = () => {
               onStatusChange={(id, status) => statusMutation.mutate({ id, status })}
             />
           </TabsContent>
+
+          {/* TAB: Histórico */}
+          <TabsContent value="history" className="space-y-6">
+            <OutreachHistory />
+          </TabsContent>
         </Tabs>
       </main>
     </div>
