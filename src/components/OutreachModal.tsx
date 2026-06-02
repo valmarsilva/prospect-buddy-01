@@ -150,23 +150,20 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
     return texto;
   };
 
-  const abrirWhatsApp = (texto: string) => {
+  const buildWhatsAppUrl = (texto: string) => {
     const numero = lead.whatsapp_link
       ? lead.whatsapp_link.replace("https://wa.me/", "")
       : lead.telefone?.replace(/\D/g, "");
     if (!numero) throw new Error("Lead sem número de WhatsApp.");
-    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, "_blank");
+    return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
   };
 
-  const abrirEmail = (texto: string) => {
+  const buildEmailUrl = (texto: string) => {
     const destino = emailDestino.trim();
     if (!destino) throw new Error("Informe um e-mail de destino.");
-    window.open(
-      `mailto:${encodeURIComponent(destino)}?subject=${encodeURIComponent(
-        `Proposta para ${lead.nome}`
-      )}&body=${encodeURIComponent(texto)}`,
-      "_blank"
-    );
+    return `mailto:${encodeURIComponent(destino)}?subject=${encodeURIComponent(
+      `Proposta para ${lead.nome}`
+    )}&body=${encodeURIComponent(texto)}`;
   };
 
   const handleEnviar = async () => {
@@ -175,8 +172,38 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       return;
     }
 
-    // Abre as abas IMEDIATAMENTE (resposta síncrona ao clique) para evitar
-    // bloqueio de pop-up. Atualizamos a URL depois que o upload terminar.
+    if (modoLink) {
+      // MODO LINK: faz upload primeiro, depois exibe links clicáveis
+      setEnviando(true);
+      try {
+        const enviados = await uploadArquivos();
+        const texto = montarTexto(enviados);
+
+        if (canal === "whatsapp" || canal === "ambos") {
+          setLinkWhatsApp(buildWhatsAppUrl(texto));
+        }
+        if (canal === "email" || canal === "ambos") {
+          setLinkEmail(buildEmailUrl(texto));
+        }
+
+        await salvarLog(enviados);
+        toast({
+          title: "Links gerados!",
+          description: "Clique nos links abaixo para abrir WhatsApp/E-mail.",
+        });
+      } catch (err: unknown) {
+        toast({
+          title: "Erro",
+          description: err instanceof Error ? err.message : "Erro ao gerar links",
+          variant: "destructive",
+        });
+      } finally {
+        setEnviando(false);
+      }
+      return;
+    }
+
+    // MODO AUTOMÁTICO: abre as abas IMEDIATAMENTE (resposta síncrona ao clique)
     let waWindow: Window | null = null;
     let mailWindow: Window | null = null;
 
@@ -207,16 +234,10 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       const texto = montarTexto(enviados);
 
       if (waWindow) {
-        const numero = lead.whatsapp_link
-          ? lead.whatsapp_link.replace("https://wa.me/", "")
-          : lead.telefone?.replace(/\D/g, "");
-        if (!numero) throw new Error("Lead sem número de WhatsApp.");
-        waWindow.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+        waWindow.location.href = buildWhatsAppUrl(texto);
       }
       if (mailWindow) {
-        mailWindow.location.href = `mailto:${encodeURIComponent(
-          emailDestino.trim()
-        )}?subject=${encodeURIComponent(`Proposta para ${lead.nome}`)}&body=${encodeURIComponent(texto)}`;
+        mailWindow.location.href = buildEmailUrl(texto);
       }
 
       await salvarLog(enviados);
