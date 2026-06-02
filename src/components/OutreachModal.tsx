@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -12,8 +12,8 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  MessageCircle, Mail, Sparkles, Upload, X, ExternalLink,
-  Send, Loader2, FileText, Image,
+  MessageCircle, Mail, Sparkles, Upload, X, Send, Loader2,
+  FileText, Image as ImageIcon, Paperclip,
 } from "lucide-react";
 import type { Lead } from "@/lib/leads-api";
 
@@ -26,6 +26,13 @@ interface OutreachModalProps {
 type Canal = "whatsapp" | "email" | "ambos";
 
 const MAX_FILE_MB = 10;
+const MAX_FILES = 5;
+const ACCEPTED = ".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx";
+
+interface UploadedFile {
+  file: File;
+  url?: string;
+}
 
 export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   const queryClient = useQueryClient();
@@ -34,22 +41,41 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   const [canal, setCanal] = useState<Canal>("whatsapp");
   const [mensagem, setMensagem] = useState("");
   const [emailDestino, setEmailDestino] = useState("");
-  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [arquivos, setArquivos] = useState<UploadedFile[]>([]);
   const [gerando, setGerando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > MAX_FILE_MB * 1024 * 1024) {
-      toast({ title: "Arquivo muito grande", description: `Máximo ${MAX_FILE_MB}MB.`, variant: "destructive" });
-      return;
+  const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+
+    const slotsLivres = MAX_FILES - arquivos.length;
+    if (files.length > slotsLivres) {
+      toast({
+        title: `Máximo ${MAX_FILES} arquivos`,
+        description: `Você pode adicionar mais ${slotsLivres}.`,
+        variant: "destructive",
+      });
     }
-    setArquivo(file);
+
+    const novos: UploadedFile[] = [];
+    for (const file of files.slice(0, slotsLivres)) {
+      if (file.size > MAX_FILE_MB * 1024 * 1024) {
+        toast({
+          title: "Arquivo muito grande",
+          description: `${file.name} excede ${MAX_FILE_MB}MB.`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      novos.push({ file });
+    }
+    setArquivos((prev) => [...prev, ...novos]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const removeFile = () => {
-    setArquivo(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const removerArquivo = (idx: number) => {
+    setArquivos((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const gerarProposta = async () => {
@@ -61,7 +87,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
       setMensagem(data.proposta || "");
-      toast({ title: "Proposta gerada!", description: "Revise e edite antes de enviar." });
+      toast({ title: "Proposta gerada!", description: "Revise antes de enviar." });
     } catch (err: unknown) {
       toast({
         title: "Erro ao gerar proposta",
@@ -73,97 +99,92 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
     }
   };
 
-  const salvarLog = async (arquivoUrl?: string) => {
+  const uploadArquivos = async (): Promise<UploadedFile[]> => {
+    if (!arquivos.length) return [];
+    const enviados: UploadedFile[] = [];
+    for (const a of arquivos) {
+      const ext = a.file.name.split(".").pop();
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage
+        .from("outreach-files")
+        .upload(path, a.file, { upsert: false });
+      if (error) throw new Error(`Erro no upload de ${a.file.name}: ${error.message}`);
+      const { data } = supabase.storage.from("outreach-files").getPublicUrl(path);
+      enviados.push({ file: a.file, url: data.publicUrl });
+    }
+    return enviados;
+  };
+
+  const salvarLog = async (enviados: UploadedFile[]) => {
     if (!lead.id) return;
+    const nomes = enviados.map((e) => e.file.name).join(", ") || null;
+    const urls = enviados.map((e) => e.url).filter(Boolean).join("\n") || null;
     await supabase.from("outreach_logs").insert({
       lead_id: lead.id,
       canal,
       mensagem,
-      arquivo_nome: arquivo?.name ?? null,
-      arquivo_url: arquivoUrl ?? null,
+      arquivo_nome: nomes,
+      arquivo_url: urls,
       enviado_whatsapp: canal === "whatsapp" || canal === "ambos",
       enviado_email: canal === "email" || canal === "ambos",
       email_destino: emailDestino || null,
       status: "enviado",
     });
-    // Atualiza status do lead para "contatado"
     await supabase.from("leads").update({ status: "contatado" }).eq("id", lead.id);
     queryClient.invalidateQueries({ queryKey: ["saved-leads"] });
+    queryClient.invalidateQueries({ queryKey: ["outreach-logs"] });
   };
 
-  const uploadArquivo = async (): Promise<string | undefined> => {
-    if (!arquivo) return undefined;
-    const ext = arquivo.name.split(".").pop();
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage
-      .from("outreach-files")
-      .upload(path, arquivo, { upsert: false });
-    if (error) throw new Error("Erro ao fazer upload: " + error.message);
-    const { data } = supabase.storage.from("outreach-files").getPublicUrl(path);
-    return data.publicUrl;
-  };
-
-  const enviarWhatsApp = async () => {
-    if (!mensagem.trim()) {
-      toast({ title: "Escreva uma mensagem antes de enviar.", variant: "destructive" });
-      return;
-    }
-    if (!lead.whatsapp_link && !lead.telefone) {
-      toast({ title: "Lead sem número de WhatsApp.", variant: "destructive" });
-      return;
-    }
-
-    try {
-      let arquivoUrl: string | undefined;
-      if (arquivo) arquivoUrl = await uploadArquivo();
-
-      let texto = mensagem;
-      if (arquivoUrl) texto += `\n\n📎 Arquivo: ${arquivoUrl}`;
-
-      const numero = lead.whatsapp_link
-        ? lead.whatsapp_link.replace("https://wa.me/", "")
-        : lead.telefone?.replace(/\D/g, "");
-
-      const waUrl = `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
-      window.open(waUrl, "_blank");
-
-      await salvarLog(arquivoUrl);
-      toast({ title: "WhatsApp aberto!", description: "Converse com o lead." });
-      onClose();
-    } catch (err: unknown) {
-      toast({
-        title: "Erro",
-        description: err instanceof Error ? err.message : "Erro ao enviar",
-        variant: "destructive",
+  const montarTexto = (enviados: UploadedFile[]) => {
+    let texto = mensagem;
+    if (enviados.length) {
+      texto += "\n\n📎 Arquivos:";
+      enviados.forEach((e) => {
+        texto += `\n• ${e.file.name}: ${e.url}`;
       });
     }
+    return texto;
   };
 
-  const enviarEmail = async () => {
-    if (!mensagem.trim()) {
-      toast({ title: "Escreva uma mensagem antes de enviar.", variant: "destructive" });
-      return;
-    }
-    const destino = emailDestino.trim() || lead.website;
-    if (!destino) {
-      toast({ title: "Informe um e-mail de destino.", variant: "destructive" });
-      return;
-    }
+  const abrirWhatsApp = (texto: string) => {
+    const numero = lead.whatsapp_link
+      ? lead.whatsapp_link.replace("https://wa.me/", "")
+      : lead.telefone?.replace(/\D/g, "");
+    if (!numero) throw new Error("Lead sem número de WhatsApp.");
+    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, "_blank");
+  };
 
-    try {
-      let arquivoUrl: string | undefined;
-      if (arquivo) arquivoUrl = await uploadArquivo();
-
-      let corpo = mensagem;
-      if (arquivoUrl) corpo += `\n\nArquivo em anexo: ${arquivoUrl}`;
-
-      const mailUrl = `mailto:${encodeURIComponent(destino)}?subject=${encodeURIComponent(
+  const abrirEmail = (texto: string) => {
+    const destino = emailDestino.trim();
+    if (!destino) throw new Error("Informe um e-mail de destino.");
+    window.open(
+      `mailto:${encodeURIComponent(destino)}?subject=${encodeURIComponent(
         `Proposta para ${lead.nome}`
-      )}&body=${encodeURIComponent(corpo)}`;
-      window.open(mailUrl, "_blank");
+      )}&body=${encodeURIComponent(texto)}`,
+      "_blank"
+    );
+  };
 
-      await salvarLog(arquivoUrl);
-      toast({ title: "Cliente de e-mail aberto!", description: "Revise e envie." });
+  const handleEnviar = async () => {
+    if (!mensagem.trim()) {
+      toast({ title: "Escreva uma mensagem antes de enviar.", variant: "destructive" });
+      return;
+    }
+    setEnviando(true);
+    try {
+      const enviados = await uploadArquivos();
+      const texto = montarTexto(enviados);
+
+      if (canal === "whatsapp" || canal === "ambos") abrirWhatsApp(texto);
+      if (canal === "email" || canal === "ambos") abrirEmail(texto);
+
+      await salvarLog(enviados);
+      toast({
+        title: "Envio registrado!",
+        description: enviados.length
+          ? `${enviados.length} arquivo(s) anexado(s) e link enviado.`
+          : "Mensagem pronta para envio.",
+      });
       onClose();
     } catch (err: unknown) {
       toast({
@@ -171,22 +192,17 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
         description: err instanceof Error ? err.message : "Erro ao enviar",
         variant: "destructive",
       });
+    } finally {
+      setEnviando(false);
     }
   };
 
-  const handleEnviar = () => {
-    if (canal === "whatsapp") enviarWhatsApp();
-    else if (canal === "email") enviarEmail();
-    else {
-      enviarWhatsApp().then(() => enviarEmail());
-    }
-  };
-
-  const fileIcon = arquivo
-    ? arquivo.type.startsWith("image/")
-      ? <Image className="h-4 w-4 text-primary" />
-      : <FileText className="h-4 w-4 text-primary" />
-    : null;
+  const iconeArquivo = (file: File) =>
+    file.type.startsWith("image/") ? (
+      <ImageIcon className="h-4 w-4 text-primary" />
+    ) : (
+      <FileText className="h-4 w-4 text-primary" />
+    );
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -200,7 +216,6 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
         </DialogHeader>
 
         <div className="space-y-5">
-          {/* Info do lead */}
           <div className="flex flex-wrap gap-2 rounded-lg bg-secondary/50 p-3">
             {lead.ramo && <Badge variant="secondary">{lead.ramo}</Badge>}
             {lead.cidade && <Badge variant="outline">{lead.cidade}</Badge>}
@@ -210,13 +225,10 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
               </Badge>
             )}
             {lead.whatsapp_link && (
-              <Badge className="bg-accent/20 text-accent border-accent/30">
-                ✅ WhatsApp
-              </Badge>
+              <Badge className="bg-accent/20 text-accent border-accent/30">✅ WhatsApp</Badge>
             )}
           </div>
 
-          {/* Canal */}
           <div className="space-y-2">
             <Label>Canal de envio</Label>
             <Tabs value={canal} onValueChange={(v) => setCanal(v as Canal)}>
@@ -252,7 +264,6 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
             </Tabs>
           </div>
 
-          {/* Mensagem */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="mensagem">Mensagem</Label>
@@ -274,7 +285,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
             </div>
             <Textarea
               id="mensagem"
-              placeholder="Escreva sua mensagem ou clique em 'Gerar com IA' para uma proposta personalizada..."
+              placeholder="Escreva sua mensagem ou clique em 'Gerar com IA'..."
               value={mensagem}
               onChange={(e) => setMensagem(e.target.value)}
               rows={8}
@@ -283,58 +294,85 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
             <p className="text-xs text-muted-foreground">{mensagem.length} caracteres</p>
           </div>
 
-          {/* Upload de arquivo */}
           <div className="space-y-2">
-            <Label>Arquivo (opcional)</Label>
-            {arquivo ? (
-              <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/40 px-4 py-3">
-                {fileIcon}
-                <span className="flex-1 truncate text-sm font-medium">{arquivo.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {(arquivo.size / 1024 / 1024).toFixed(2)} MB
-                </span>
-                <Button size="sm" variant="ghost" onClick={removeFile} className="h-7 w-7 p-0">
-                  <X className="h-4 w-4" />
-                </Button>
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                Arquivos (PDF, PNG, JPG…)
+              </Label>
+              <span className="text-xs text-muted-foreground">
+                {arquivos.length}/{MAX_FILES} · máx. {MAX_FILE_MB}MB cada
+              </span>
+            </div>
+
+            {arquivos.length > 0 && (
+              <div className="space-y-2">
+                {arquivos.map((a, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-secondary/40 px-4 py-2"
+                  >
+                    {iconeArquivo(a.file)}
+                    <span className="flex-1 truncate text-sm font-medium">{a.file.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {(a.file.size / 1024 / 1024).toFixed(2)} MB
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => removerArquivo(idx)}
+                      className="h-7 w-7 p-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-            ) : (
+            )}
+
+            {arquivos.length < MAX_FILES && (
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border bg-secondary/20 px-4 py-6 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40"
               >
                 <Upload className="h-5 w-5" />
-                <span>
-                  Clique para selecionar um arquivo
-                  <span className="ml-1 text-xs">(PDF, imagem, doc — máx. {MAX_FILE_MB}MB)</span>
-                </span>
+                <span>Clique para selecionar arquivos do seu PC</span>
               </button>
             )}
+
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               className="hidden"
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.gif"
-              onChange={handleFile}
+              accept={ACCEPTED}
+              onChange={handleFiles}
             />
           </div>
         </div>
 
         <DialogFooter className="gap-2 pt-2">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={enviando}>
             Cancelar
           </Button>
-          <Button
-            onClick={handleEnviar}
-            disabled={!mensagem.trim()}
-            className="gap-2"
-          >
-            {canal === "whatsapp" && <MessageCircle className="h-4 w-4" />}
-            {canal === "email" && <Mail className="h-4 w-4" />}
-            {canal === "ambos" && <Send className="h-4 w-4" />}
-            {canal === "whatsapp" && "Abrir WhatsApp"}
-            {canal === "email" && "Abrir E-mail"}
-            {canal === "ambos" && "Enviar nos 2 canais"}
+          <Button onClick={handleEnviar} disabled={!mensagem.trim() || enviando} className="gap-2">
+            {enviando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                {canal === "whatsapp" && <MessageCircle className="h-4 w-4" />}
+                {canal === "email" && <Mail className="h-4 w-4" />}
+                {canal === "ambos" && <Send className="h-4 w-4" />}
+              </>
+            )}
+            {enviando
+              ? "Enviando..."
+              : canal === "whatsapp"
+              ? "Abrir WhatsApp"
+              : canal === "email"
+              ? "Abrir E-mail"
+              : "Enviar nos 2 canais"}
           </Button>
         </DialogFooter>
       </DialogContent>
