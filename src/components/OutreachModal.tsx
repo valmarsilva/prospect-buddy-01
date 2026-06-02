@@ -45,6 +45,9 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   const [arquivos, setArquivos] = useState<UploadedFile[]>([]);
   const [gerando, setGerando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [modoLink, setModoLink] = useState(false);
+  const [linkWhatsApp, setLinkWhatsApp] = useState("");
+  const [linkEmail, setLinkEmail] = useState("");
 
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
