@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   MessageCircle, Mail, Sparkles, Upload, X, Send, Loader2,
-  FileText, Image as ImageIcon, Paperclip,
+  FileText, Image as ImageIcon, Paperclip, ExternalLink,
 } from "lucide-react";
 import type { Lead } from "@/lib/leads-api";
 
