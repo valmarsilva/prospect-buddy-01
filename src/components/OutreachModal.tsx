@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   MessageCircle, Mail, Sparkles, Upload, X, Send, Loader2,
-  FileText, Image as ImageIcon, Paperclip,
+  FileText, Image as ImageIcon, Paperclip, ExternalLink,
 } from "lucide-react";
 import type { Lead } from "@/lib/leads-api";
 
@@ -44,6 +45,9 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   const [arquivos, setArquivos] = useState<UploadedFile[]>([]);
   const [gerando, setGerando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [modoLink, setModoLink] = useState(false);
+  const [linkWhatsApp, setLinkWhatsApp] = useState("");
+  const [linkEmail, setLinkEmail] = useState("");
 
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -146,23 +150,20 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
     return texto;
   };
 
-  const abrirWhatsApp = (texto: string) => {
+  const buildWhatsAppUrl = (texto: string) => {
     const numero = lead.whatsapp_link
       ? lead.whatsapp_link.replace("https://wa.me/", "")
       : lead.telefone?.replace(/\D/g, "");
     if (!numero) throw new Error("Lead sem número de WhatsApp.");
-    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, "_blank");
+    return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
   };
 
-  const abrirEmail = (texto: string) => {
+  const buildEmailUrl = (texto: string) => {
     const destino = emailDestino.trim();
     if (!destino) throw new Error("Informe um e-mail de destino.");
-    window.open(
-      `mailto:${encodeURIComponent(destino)}?subject=${encodeURIComponent(
-        `Proposta para ${lead.nome}`
-      )}&body=${encodeURIComponent(texto)}`,
-      "_blank"
-    );
+    return `mailto:${encodeURIComponent(destino)}?subject=${encodeURIComponent(
+      `Proposta para ${lead.nome}`
+    )}&body=${encodeURIComponent(texto)}`;
   };
 
   const handleEnviar = async () => {
@@ -171,8 +172,38 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       return;
     }
 
-    // Abre as abas IMEDIATAMENTE (resposta síncrona ao clique) para evitar
-    // bloqueio de pop-up. Atualizamos a URL depois que o upload terminar.
+    if (modoLink) {
+      // MODO LINK: faz upload primeiro, depois exibe links clicáveis
+      setEnviando(true);
+      try {
+        const enviados = await uploadArquivos();
+        const texto = montarTexto(enviados);
+
+        if (canal === "whatsapp" || canal === "ambos") {
+          setLinkWhatsApp(buildWhatsAppUrl(texto));
+        }
+        if (canal === "email" || canal === "ambos") {
+          setLinkEmail(buildEmailUrl(texto));
+        }
+
+        await salvarLog(enviados);
+        toast({
+          title: "Links gerados!",
+          description: "Clique nos links abaixo para abrir WhatsApp/E-mail.",
+        });
+      } catch (err: unknown) {
+        toast({
+          title: "Erro",
+          description: err instanceof Error ? err.message : "Erro ao gerar links",
+          variant: "destructive",
+        });
+      } finally {
+        setEnviando(false);
+      }
+      return;
+    }
+
+    // MODO AUTOMÁTICO: abre as abas IMEDIATAMENTE (resposta síncrona ao clique)
     let waWindow: Window | null = null;
     let mailWindow: Window | null = null;
 
@@ -203,16 +234,10 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       const texto = montarTexto(enviados);
 
       if (waWindow) {
-        const numero = lead.whatsapp_link
-          ? lead.whatsapp_link.replace("https://wa.me/", "")
-          : lead.telefone?.replace(/\D/g, "");
-        if (!numero) throw new Error("Lead sem número de WhatsApp.");
-        waWindow.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+        waWindow.location.href = buildWhatsAppUrl(texto);
       }
       if (mailWindow) {
-        mailWindow.location.href = `mailto:${encodeURIComponent(
-          emailDestino.trim()
-        )}?subject=${encodeURIComponent(`Proposta para ${lead.nome}`)}&body=${encodeURIComponent(texto)}`;
+        mailWindow.location.href = buildEmailUrl(texto);
       }
 
       await salvarLog(enviados);
@@ -243,8 +268,21 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       <FileText className="h-4 w-4 text-primary" />
     );
 
+  const limparLinks = () => {
+    setLinkWhatsApp("");
+    setLinkEmail("");
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          limparLinks();
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -301,6 +339,22 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
                 </TabsContent>
               )}
             </Tabs>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg bg-secondary/40 px-4 py-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Modo link clicável</Label>
+              <p className="text-xs text-muted-foreground">
+                Faz upload dos arquivos e exibe um link para você clicar (evita bloqueio de pop-up).
+              </p>
+            </div>
+            <Switch
+              checked={modoLink}
+              onCheckedChange={(v) => {
+                setModoLink(v);
+                limparLinks();
+              }}
+            />
           </div>
 
           <div className="space-y-2">
@@ -389,10 +443,42 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
               onChange={handleFiles}
             />
           </div>
+
+          {(linkWhatsApp || linkEmail) && (
+            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <p className="text-sm font-medium text-primary">
+                Links gerados — clique para abrir:
+              </p>
+              {linkWhatsApp && (
+                <a
+                  href={linkWhatsApp}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg bg-[#25D366]/10 px-4 py-3 text-sm font-medium text-[#25D366] transition-colors hover:bg-[#25D366]/20"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  Abrir WhatsApp com mensagem e arquivos
+                  <ExternalLink className="ml-auto h-4 w-4" />
+                </a>
+              )}
+              {linkEmail && (
+                <a
+                  href={linkEmail}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg bg-blue-500/10 px-4 py-3 text-sm font-medium text-blue-500 transition-colors hover:bg-blue-500/20"
+                >
+                  <Mail className="h-5 w-5" />
+                  Abrir cliente de e-mail com proposta
+                  <ExternalLink className="ml-auto h-4 w-4" />
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 pt-2">
-          <Button variant="outline" onClick={onClose} disabled={enviando}>
+          <Button variant="outline" onClick={() => { limparLinks(); onClose(); }} disabled={enviando}>
             Cancelar
           </Button>
           <Button onClick={handleEnviar} disabled={!mensagem.trim() || enviando} className="gap-2">
@@ -406,7 +492,11 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
               </>
             )}
             {enviando
-              ? "Enviando..."
+              ? modoLink
+                ? "Gerando links..."
+                : "Enviando..."
+              : modoLink
+              ? "Gerar link"
               : canal === "whatsapp"
               ? "Abrir WhatsApp"
               : canal === "email"
