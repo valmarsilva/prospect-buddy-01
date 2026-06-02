@@ -170,13 +170,50 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       toast({ title: "Escreva uma mensagem antes de enviar.", variant: "destructive" });
       return;
     }
+
+    // Abre as abas IMEDIATAMENTE (resposta síncrona ao clique) para evitar
+    // bloqueio de pop-up. Atualizamos a URL depois que o upload terminar.
+    let waWindow: Window | null = null;
+    let mailWindow: Window | null = null;
+
+    if (canal === "whatsapp" || canal === "ambos") {
+      waWindow = window.open("about:blank", "_blank");
+    }
+    if (canal === "email" || canal === "ambos") {
+      if (!emailDestino.trim()) {
+        toast({ title: "Informe um e-mail de destino.", variant: "destructive" });
+        waWindow?.close();
+        return;
+      }
+      mailWindow = window.open("about:blank", "_blank");
+    }
+
+    if ((canal === "whatsapp" || canal === "ambos") && !waWindow) {
+      toast({
+        title: "Pop-up bloqueado",
+        description: "Permita pop-ups deste site para abrir o WhatsApp/E-mail.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setEnviando(true);
     try {
       const enviados = await uploadArquivos();
       const texto = montarTexto(enviados);
 
-      if (canal === "whatsapp" || canal === "ambos") abrirWhatsApp(texto);
-      if (canal === "email" || canal === "ambos") abrirEmail(texto);
+      if (waWindow) {
+        const numero = lead.whatsapp_link
+          ? lead.whatsapp_link.replace("https://wa.me/", "")
+          : lead.telefone?.replace(/\D/g, "");
+        if (!numero) throw new Error("Lead sem número de WhatsApp.");
+        waWindow.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+      }
+      if (mailWindow) {
+        mailWindow.location.href = `mailto:${encodeURIComponent(
+          emailDestino.trim()
+        )}?subject=${encodeURIComponent(`Proposta para ${lead.nome}`)}&body=${encodeURIComponent(texto)}`;
+      }
 
       await salvarLog(enviados);
       toast({
@@ -187,6 +224,8 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       });
       onClose();
     } catch (err: unknown) {
+      waWindow?.close();
+      mailWindow?.close();
       toast({
         title: "Erro",
         description: err instanceof Error ? err.message : "Erro ao enviar",
