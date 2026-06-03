@@ -28,7 +28,20 @@ type Canal = "whatsapp" | "email" | "ambos";
 
 const MAX_FILE_MB = 10;
 const MAX_FILES = 5;
-const ACCEPTED = ".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx";
+const ACCEPTED = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  ".pdf",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".doc",
+  ".docx",
+].join(",");
+const ACCEPTED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "webp", "doc", "docx"];
 
 interface UploadedFile {
   file: File;
@@ -45,7 +58,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   const [arquivos, setArquivos] = useState<UploadedFile[]>([]);
   const [gerando, setGerando] = useState(false);
   const [enviando, setEnviando] = useState(false);
-  const [modoLink, setModoLink] = useState(false);
+  const [modoLink, setModoLink] = useState(true);
   const [linkWhatsApp, setLinkWhatsApp] = useState("");
   const [linkEmail, setLinkEmail] = useState("");
 
@@ -64,6 +77,15 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
 
     const novos: UploadedFile[] = [];
     for (const file of files.slice(0, slotsLivres)) {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+        toast({
+          title: "Tipo de arquivo não aceito",
+          description: `${file.name} precisa ser PDF, PNG, JPG, WEBP, DOC ou DOCX.`,
+          variant: "destructive",
+        });
+        continue;
+      }
       if (file.size > MAX_FILE_MB * 1024 * 1024) {
         toast({
           title: "Arquivo muito grande",
@@ -74,11 +96,13 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       }
       novos.push({ file });
     }
+    limparLinks();
     setArquivos((prev) => [...prev, ...novos]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const removerArquivo = (idx: number) => {
+    limparLinks();
     setArquivos((prev) => prev.filter((_, i) => i !== idx));
   };
 
