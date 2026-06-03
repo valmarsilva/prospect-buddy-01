@@ -28,7 +28,20 @@ type Canal = "whatsapp" | "email" | "ambos";
 
 const MAX_FILE_MB = 10;
 const MAX_FILES = 5;
-const ACCEPTED = ".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx";
+const ACCEPTED = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  ".pdf",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".doc",
+  ".docx",
+].join(",");
+const ACCEPTED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "webp", "doc", "docx"];
 
 interface UploadedFile {
   file: File;
@@ -45,7 +58,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   const [arquivos, setArquivos] = useState<UploadedFile[]>([]);
   const [gerando, setGerando] = useState(false);
   const [enviando, setEnviando] = useState(false);
-  const [modoLink, setModoLink] = useState(false);
+  const [modoLink, setModoLink] = useState(true);
   const [linkWhatsApp, setLinkWhatsApp] = useState("");
   const [linkEmail, setLinkEmail] = useState("");
 
@@ -64,6 +77,15 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
 
     const novos: UploadedFile[] = [];
     for (const file of files.slice(0, slotsLivres)) {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+        toast({
+          title: "Tipo de arquivo não aceito",
+          description: `${file.name} precisa ser PDF, PNG, JPG, WEBP, DOC ou DOCX.`,
+          variant: "destructive",
+        });
+        continue;
+      }
       if (file.size > MAX_FILE_MB * 1024 * 1024) {
         toast({
           title: "Arquivo muito grande",
@@ -74,11 +96,13 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       }
       novos.push({ file });
     }
+    limparLinks();
     setArquivos((prev) => [...prev, ...novos]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const removerArquivo = (idx: number) => {
+    limparLinks();
     setArquivos((prev) => prev.filter((_, i) => i !== idx));
   };
 
@@ -293,6 +317,11 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
         </DialogHeader>
 
         <div className="space-y-5">
+          <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+            O envio usa links clicáveis por padrão para evitar bloqueio do navegador. Selecione PDF,
+            PNG, JPG, WEBP, DOC ou DOCX e clique em gerar link.
+          </div>
+
           <div className="flex flex-wrap gap-2 rounded-lg bg-secondary/50 p-3">
             {lead.ramo && <Badge variant="secondary">{lead.ramo}</Badge>}
             {lead.cidade && <Badge variant="outline">{lead.cidade}</Badge>}
@@ -343,9 +372,9 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
 
           <div className="flex items-center justify-between rounded-lg bg-secondary/40 px-4 py-3">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Modo link clicável</Label>
+              <Label className="text-sm font-medium">Modo seguro sem bloqueio</Label>
               <p className="text-xs text-muted-foreground">
-                Faz upload dos arquivos e exibe um link para você clicar (evita bloqueio de pop-up).
+                Faz upload dos arquivos e exibe um link para você clicar. Desligue apenas se quiser abrir abas automaticamente.
               </p>
             </div>
             <Switch
@@ -430,7 +459,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
                 className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border bg-secondary/20 px-4 py-6 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-secondary/40"
               >
                 <Upload className="h-5 w-5" />
-                <span>Clique para selecionar arquivos do seu PC</span>
+                <span>Clique para selecionar PDF, PNG, JPG, WEBP, DOC ou DOCX</span>
               </button>
             )}
 
