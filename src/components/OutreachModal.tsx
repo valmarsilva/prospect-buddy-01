@@ -14,7 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   MessageCircle, Mail, Sparkles, Upload, X, Send, Loader2,
-  FileText, Image as ImageIcon, Paperclip, ExternalLink,
+  FileText, Image as ImageIcon, Paperclip, ExternalLink, Copy,
 } from "lucide-react";
 import type { Lead } from "@/lib/leads-api";
 
@@ -60,7 +60,9 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   const [enviando, setEnviando] = useState(false);
   const [modoLink, setModoLink] = useState(true);
   const [linkWhatsApp, setLinkWhatsApp] = useState("");
+  const [linkWhatsAppSemTexto, setLinkWhatsAppSemTexto] = useState("");
   const [linkEmail, setLinkEmail] = useState("");
+  const [textoGerado, setTextoGerado] = useState("");
 
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -179,7 +181,25 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       ? lead.whatsapp_link.replace("https://wa.me/", "")
       : lead.telefone?.replace(/\D/g, "");
     if (!numero) throw new Error("Lead sem número de WhatsApp.");
-    return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+    return `https://api.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(texto)}`;
+  };
+
+  const buildWhatsAppUrlSemTexto = () => {
+    const numero = lead.whatsapp_link
+      ? lead.whatsapp_link.replace("https://wa.me/", "")
+      : lead.telefone?.replace(/\D/g, "");
+    if (!numero) throw new Error("Lead sem número de WhatsApp.");
+    return `https://api.whatsapp.com/send?phone=${numero}`;
+  };
+
+  const copiarMensagem = async () => {
+    if (!textoGerado) return;
+    try {
+      await navigator.clipboard.writeText(textoGerado);
+      toast({ title: "Mensagem copiada!", description: "Agora abra o WhatsApp e cole no chat." });
+    } catch {
+      toast({ title: "Não foi possível copiar", description: "Selecione e copie a mensagem manualmente.", variant: "destructive" });
+    }
   };
 
   const buildEmailUrl = (texto: string) => {
@@ -205,10 +225,12 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
 
         if (canal === "whatsapp" || canal === "ambos") {
           setLinkWhatsApp(buildWhatsAppUrl(texto));
+          setLinkWhatsAppSemTexto(buildWhatsAppUrlSemTexto());
         }
         if (canal === "email" || canal === "ambos") {
           setLinkEmail(buildEmailUrl(texto));
         }
+        setTextoGerado(texto);
 
         await salvarLog(enviados);
         toast({
@@ -294,7 +316,9 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
 
   const limparLinks = () => {
     setLinkWhatsApp("");
+    setLinkWhatsAppSemTexto("");
     setLinkEmail("");
+    setTextoGerado("");
   };
 
   return (
