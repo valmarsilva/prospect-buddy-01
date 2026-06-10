@@ -502,15 +502,43 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
               <p className="text-sm font-medium text-primary">
                 Links gerados — clique para abrir:
               </p>
+              {textoGerado && (canal === "whatsapp" || canal === "ambos") && (
+                <div className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-muted-foreground">Mensagem pronta para copiar</p>
+                    <Button type="button" size="sm" variant="outline" onClick={copiarMensagem} className="gap-2">
+                      <Copy className="h-3 w-3" />
+                      Copiar
+                    </Button>
+                  </div>
+                  <Textarea value={textoGerado} readOnly rows={5} className="resize-none text-xs" />
+                </div>
+              )}
               {linkWhatsApp && (
                 <a
                   href={linkWhatsApp}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    window.location.href = linkWhatsApp;
+                  }}
                   className="flex items-center gap-2 rounded-lg bg-[#25D366]/10 px-4 py-3 text-sm font-medium text-[#25D366] transition-colors hover:bg-[#25D366]/20"
                 >
                   <MessageCircle className="h-5 w-5" />
-                  Abrir WhatsApp com mensagem e arquivos
+                  Abrir WhatsApp nesta aba
+                  <ExternalLink className="ml-auto h-4 w-4" />
+                </a>
+              )}
+              {linkWhatsAppSemTexto && (
+                <a
+                  href={linkWhatsAppSemTexto}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    window.location.href = linkWhatsAppSemTexto;
+                  }}
+                  className="flex items-center gap-2 rounded-lg border border-[#25D366]/30 px-4 py-3 text-sm font-medium text-[#25D366] transition-colors hover:bg-[#25D366]/10"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  Se bloquear, abrir chat vazio e colar mensagem
                   <ExternalLink className="ml-auto h-4 w-4" />
                 </a>
               )}
