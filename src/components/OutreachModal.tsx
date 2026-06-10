@@ -514,28 +514,24 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
               {linkWhatsApp && (
                 <a
                   href={linkWhatsApp}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    window.location.href = linkWhatsApp;
-                  }}
-                  className="flex items-center gap-2 rounded-lg bg-[#25D366]/10 px-4 py-3 text-sm font-medium text-[#25D366] transition-colors hover:bg-[#25D366]/20"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
                 >
                   <MessageCircle className="h-5 w-5" />
-                  Abrir WhatsApp nesta aba
+                  Abrir WhatsApp e colar a mensagem copiada
                   <ExternalLink className="ml-auto h-4 w-4" />
                 </a>
               )}
               {linkWhatsAppSemTexto && (
                 <a
                   href={linkWhatsAppSemTexto}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    window.location.href = linkWhatsAppSemTexto;
-                  }}
-                  className="flex items-center gap-2 rounded-lg border border-[#25D366]/30 px-4 py-3 text-sm font-medium text-[#25D366] transition-colors hover:bg-[#25D366]/10"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg border border-accent/30 px-4 py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/10"
                 >
                   <MessageCircle className="h-5 w-5" />
-                  Se bloquear, abrir chat vazio e colar mensagem
+                  Link alternativo wa.me
                   <ExternalLink className="ml-auto h-4 w-4" />
                 </a>
               )}
