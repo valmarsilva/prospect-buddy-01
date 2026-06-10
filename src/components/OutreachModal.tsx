@@ -14,7 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   MessageCircle, Mail, Sparkles, Upload, X, Send, Loader2,
-  FileText, Image as ImageIcon, Paperclip, ExternalLink,
+  FileText, Image as ImageIcon, Paperclip, ExternalLink, Copy,
 } from "lucide-react";
 import type { Lead } from "@/lib/leads-api";
 
@@ -60,7 +60,9 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   const [enviando, setEnviando] = useState(false);
   const [modoLink, setModoLink] = useState(true);
   const [linkWhatsApp, setLinkWhatsApp] = useState("");
+  const [linkWhatsAppSemTexto, setLinkWhatsAppSemTexto] = useState("");
   const [linkEmail, setLinkEmail] = useState("");
+  const [textoGerado, setTextoGerado] = useState("");
 
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -179,7 +181,25 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       ? lead.whatsapp_link.replace("https://wa.me/", "")
       : lead.telefone?.replace(/\D/g, "");
     if (!numero) throw new Error("Lead sem número de WhatsApp.");
-    return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+    return `https://api.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(texto)}`;
+  };
+
+  const buildWhatsAppUrlSemTexto = () => {
+    const numero = lead.whatsapp_link
+      ? lead.whatsapp_link.replace("https://wa.me/", "")
+      : lead.telefone?.replace(/\D/g, "");
+    if (!numero) throw new Error("Lead sem número de WhatsApp.");
+    return `https://api.whatsapp.com/send?phone=${numero}`;
+  };
+
+  const copiarMensagem = async () => {
+    if (!textoGerado) return;
+    try {
+      await navigator.clipboard.writeText(textoGerado);
+      toast({ title: "Mensagem copiada!", description: "Agora abra o WhatsApp e cole no chat." });
+    } catch {
+      toast({ title: "Não foi possível copiar", description: "Selecione e copie a mensagem manualmente.", variant: "destructive" });
+    }
   };
 
   const buildEmailUrl = (texto: string) => {
@@ -205,10 +225,12 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
 
         if (canal === "whatsapp" || canal === "ambos") {
           setLinkWhatsApp(buildWhatsAppUrl(texto));
+          setLinkWhatsAppSemTexto(buildWhatsAppUrlSemTexto());
         }
         if (canal === "email" || canal === "ambos") {
           setLinkEmail(buildEmailUrl(texto));
         }
+        setTextoGerado(texto);
 
         await salvarLog(enviados);
         toast({
@@ -294,7 +316,9 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
 
   const limparLinks = () => {
     setLinkWhatsApp("");
+    setLinkWhatsAppSemTexto("");
     setLinkEmail("");
+    setTextoGerado("");
   };
 
   return (
@@ -478,15 +502,43 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
               <p className="text-sm font-medium text-primary">
                 Links gerados — clique para abrir:
               </p>
+              {textoGerado && (canal === "whatsapp" || canal === "ambos") && (
+                <div className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-muted-foreground">Mensagem pronta para copiar</p>
+                    <Button type="button" size="sm" variant="outline" onClick={copiarMensagem} className="gap-2">
+                      <Copy className="h-3 w-3" />
+                      Copiar
+                    </Button>
+                  </div>
+                  <Textarea value={textoGerado} readOnly rows={5} className="resize-none text-xs" />
+                </div>
+              )}
               {linkWhatsApp && (
                 <a
                   href={linkWhatsApp}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    window.location.href = linkWhatsApp;
+                  }}
                   className="flex items-center gap-2 rounded-lg bg-[#25D366]/10 px-4 py-3 text-sm font-medium text-[#25D366] transition-colors hover:bg-[#25D366]/20"
                 >
                   <MessageCircle className="h-5 w-5" />
-                  Abrir WhatsApp com mensagem e arquivos
+                  Abrir WhatsApp nesta aba
+                  <ExternalLink className="ml-auto h-4 w-4" />
+                </a>
+              )}
+              {linkWhatsAppSemTexto && (
+                <a
+                  href={linkWhatsAppSemTexto}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    window.location.href = linkWhatsAppSemTexto;
+                  }}
+                  className="flex items-center gap-2 rounded-lg border border-[#25D366]/30 px-4 py-3 text-sm font-medium text-[#25D366] transition-colors hover:bg-[#25D366]/10"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  Se bloquear, abrir chat vazio e colar mensagem
                   <ExternalLink className="ml-auto h-4 w-4" />
                 </a>
               )}
