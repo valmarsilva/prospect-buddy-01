@@ -176,19 +176,16 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
     return texto;
   };
 
-  const buildWhatsAppUrl = (texto: string) => {
+  const getNumeroWhatsApp = () => {
     const numero = lead.whatsapp_link
-      ? lead.whatsapp_link.replace("https://wa.me/", "")
+      ? lead.whatsapp_link.replace(/\D/g, "")
       : lead.telefone?.replace(/\D/g, "");
     if (!numero) throw new Error("Lead sem número de WhatsApp.");
-    return `https://api.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(texto)}`;
+    return numero;
   };
 
-  const buildWhatsAppUrlSemTexto = () => {
-    const numero = lead.whatsapp_link
-      ? lead.whatsapp_link.replace("https://wa.me/", "")
-      : lead.telefone?.replace(/\D/g, "");
-    if (!numero) throw new Error("Lead sem número de WhatsApp.");
+  const buildWhatsAppUrl = () => {
+    const numero = getNumeroWhatsApp();
     return `https://api.whatsapp.com/send?phone=${numero}`;
   };
 
@@ -224,8 +221,8 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
         const texto = montarTexto(enviados);
 
         if (canal === "whatsapp" || canal === "ambos") {
-          setLinkWhatsApp(buildWhatsAppUrl(texto));
-          setLinkWhatsAppSemTexto(buildWhatsAppUrlSemTexto());
+          setLinkWhatsApp(buildWhatsAppUrl());
+          setLinkWhatsAppSemTexto(`https://wa.me/${getNumeroWhatsApp()}`);
         }
         if (canal === "email" || canal === "ambos") {
           setLinkEmail(buildEmailUrl(texto));
@@ -280,7 +277,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       const texto = montarTexto(enviados);
 
       if (waWindow) {
-        waWindow.location.href = buildWhatsAppUrl(texto);
+        waWindow.location.href = buildWhatsAppUrl();
       }
       if (mailWindow) {
         mailWindow.location.href = buildEmailUrl(texto);
