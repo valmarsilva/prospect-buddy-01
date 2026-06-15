@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -58,11 +57,12 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   const [arquivos, setArquivos] = useState<UploadedFile[]>([]);
   const [gerando, setGerando] = useState(false);
   const [enviando, setEnviando] = useState(false);
-  const [modoLink, setModoLink] = useState(true);
   const [linkWhatsApp, setLinkWhatsApp] = useState("");
   const [linkWhatsAppSemTexto, setLinkWhatsAppSemTexto] = useState("");
   const [linkEmail, setLinkEmail] = useState("");
   const [textoGerado, setTextoGerado] = useState("");
+  const [arquivosPreparados, setArquivosPreparados] = useState<UploadedFile[]>([]);
+  const [registrando, setRegistrando] = useState(false);
 
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -177,9 +177,14 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
   };
 
   const getNumeroWhatsApp = () => {
-    const numero = lead.whatsapp_link
-      ? lead.whatsapp_link.replace(/\D/g, "")
-      : lead.telefone?.replace(/\D/g, "");
+    const origem = lead.whatsapp_link || lead.telefone || "";
+    let numero = origem.replace(/\D/g, "");
+    if (numero.startsWith("55") && numero.length > 13) {
+      numero = numero.slice(-13);
+    }
+    if (!numero.startsWith("55") && numero.length >= 10 && numero.length <= 11) {
+      numero = `55${numero}`;
+    }
     if (!numero) throw new Error("Lead sem número de WhatsApp.");
     return numero;
   };
@@ -212,63 +217,11 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       toast({ title: "Escreva uma mensagem antes de enviar.", variant: "destructive" });
       return;
     }
-
-    if (modoLink) {
-      // MODO LINK: faz upload primeiro, depois exibe links clicáveis
-      setEnviando(true);
-      try {
-        const enviados = await uploadArquivos();
-        const texto = montarTexto(enviados);
-
-        if (canal === "whatsapp" || canal === "ambos") {
-          setLinkWhatsApp(buildWhatsAppUrl());
-          setLinkWhatsAppSemTexto(`https://wa.me/${getNumeroWhatsApp()}`);
-        }
-        if (canal === "email" || canal === "ambos") {
-          setLinkEmail(buildEmailUrl(texto));
-        }
-        setTextoGerado(texto);
-
-        await salvarLog(enviados);
-        toast({
-          title: "Links gerados!",
-          description: "Clique nos links abaixo para abrir WhatsApp/E-mail.",
-        });
-      } catch (err: unknown) {
-        toast({
-          title: "Erro",
-          description: err instanceof Error ? err.message : "Erro ao gerar links",
-          variant: "destructive",
-        });
-      } finally {
-        setEnviando(false);
-      }
-      return;
-    }
-
-    // MODO AUTOMÁTICO: abre as abas IMEDIATAMENTE (resposta síncrona ao clique)
-    let waWindow: Window | null = null;
-    let mailWindow: Window | null = null;
-
-    if (canal === "whatsapp" || canal === "ambos") {
-      waWindow = window.open("about:blank", "_blank");
-    }
     if (canal === "email" || canal === "ambos") {
       if (!emailDestino.trim()) {
         toast({ title: "Informe um e-mail de destino.", variant: "destructive" });
-        waWindow?.close();
         return;
       }
-      mailWindow = window.open("about:blank", "_blank");
-    }
-
-    if ((canal === "whatsapp" || canal === "ambos") && !waWindow) {
-      toast({
-        title: "Pop-up bloqueado",
-        description: "Permita pop-ups deste site para abrir o WhatsApp/E-mail.",
-        variant: "destructive",
-      });
-      return;
     }
 
     setEnviando(true);
@@ -276,27 +229,24 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
       const enviados = await uploadArquivos();
       const texto = montarTexto(enviados);
 
-      if (waWindow) {
-        waWindow.location.href = buildWhatsAppUrl();
+      if (canal === "whatsapp" || canal === "ambos") {
+        setLinkWhatsApp(buildWhatsAppUrl());
+        setLinkWhatsAppSemTexto(`https://wa.me/${getNumeroWhatsApp()}`);
       }
-      if (mailWindow) {
-        mailWindow.location.href = buildEmailUrl(texto);
+      if (canal === "email" || canal === "ambos") {
+        setLinkEmail(buildEmailUrl(texto));
       }
+      setTextoGerado(texto);
+      setArquivosPreparados(enviados);
 
-      await salvarLog(enviados);
       toast({
-        title: "Envio registrado!",
-        description: enviados.length
-          ? `${enviados.length} arquivo(s) anexado(s) e link enviado.`
-          : "Mensagem pronta para envio.",
+        title: "Mensagem preparada!",
+        description: "Copie a mensagem, abra o WhatsApp e clique em Enviar dentro do WhatsApp.",
       });
-      onClose();
     } catch (err: unknown) {
-      waWindow?.close();
-      mailWindow?.close();
       toast({
         title: "Erro",
-        description: err instanceof Error ? err.message : "Erro ao enviar",
+        description: err instanceof Error ? err.message : "Erro ao preparar envio",
         variant: "destructive",
       });
     } finally {
@@ -316,6 +266,24 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
     setLinkWhatsAppSemTexto("");
     setLinkEmail("");
     setTextoGerado("");
+    setArquivosPreparados([]);
+  };
+
+  const registrarEnvioManual = async () => {
+    setRegistrando(true);
+    try {
+      await salvarLog(arquivosPreparados);
+      toast({ title: "Envio registrado!", description: "Lead marcado como contatado." });
+      onClose();
+    } catch (err: unknown) {
+      toast({
+        title: "Erro ao registrar",
+        description: err instanceof Error ? err.message : "Tente novamente",
+        variant: "destructive",
+      });
+    } finally {
+      setRegistrando(false);
+    }
   };
 
   return (
@@ -391,20 +359,9 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
             </Tabs>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg bg-secondary/40 px-4 py-3">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Modo seguro sem bloqueio</Label>
-              <p className="text-xs text-muted-foreground">
-                Faz upload dos arquivos e exibe um link para você clicar. Desligue apenas se quiser abrir abas automaticamente.
-              </p>
-            </div>
-            <Switch
-              checked={modoLink}
-              onCheckedChange={(v) => {
-                setModoLink(v);
-                limparLinks();
-              }}
-            />
+          <div className="rounded-lg bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
+            O site não envia a mensagem sozinho para evitar bloqueio do WhatsApp. Primeiro prepare,
+            depois copie a mensagem, abra o WhatsApp e toque em Enviar dentro do aplicativo.
           </div>
 
           <div className="space-y-2">
@@ -496,9 +453,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
 
           {(linkWhatsApp || linkEmail) && (
             <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
-              <p className="text-sm font-medium text-primary">
-                Links gerados — clique para abrir:
-              </p>
+              <p className="text-sm font-medium text-primary">Pronto para envio manual:</p>
               {textoGerado && (canal === "whatsapp" || canal === "ambos") && (
                 <div className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
                   <div className="flex items-center justify-between gap-2">
@@ -547,6 +502,16 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
                   <ExternalLink className="ml-auto h-4 w-4" />
                 </a>
               )}
+              <Button
+                type="button"
+                variant="default"
+                onClick={registrarEnvioManual}
+                disabled={registrando}
+                className="w-full gap-2"
+              >
+                {registrando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Já enviei no WhatsApp/E-mail, registrar contato
+              </Button>
             </div>
           )}
         </div>
@@ -565,17 +530,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
                 {canal === "ambos" && <Send className="h-4 w-4" />}
               </>
             )}
-            {enviando
-              ? modoLink
-                ? "Gerando links..."
-                : "Enviando..."
-              : modoLink
-              ? "Gerar link"
-              : canal === "whatsapp"
-              ? "Abrir WhatsApp"
-              : canal === "email"
-              ? "Abrir E-mail"
-              : "Enviar nos 2 canais"}
+            {enviando ? "Preparando..." : "Preparar mensagem e links"}
           </Button>
         </DialogFooter>
       </DialogContent>
