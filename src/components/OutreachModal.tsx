@@ -359,20 +359,9 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
             </Tabs>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg bg-secondary/40 px-4 py-3">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Modo seguro sem bloqueio</Label>
-              <p className="text-xs text-muted-foreground">
-                Faz upload dos arquivos e exibe um link para você clicar. Desligue apenas se quiser abrir abas automaticamente.
-              </p>
-            </div>
-            <Switch
-              checked={modoLink}
-              onCheckedChange={(v) => {
-                setModoLink(v);
-                limparLinks();
-              }}
-            />
+          <div className="rounded-lg bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
+            O site não envia a mensagem sozinho para evitar bloqueio do WhatsApp. Primeiro prepare,
+            depois copie a mensagem, abra o WhatsApp e toque em Enviar dentro do aplicativo.
           </div>
 
           <div className="space-y-2">
@@ -464,9 +453,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
 
           {(linkWhatsApp || linkEmail) && (
             <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
-              <p className="text-sm font-medium text-primary">
-                Links gerados — clique para abrir:
-              </p>
+              <p className="text-sm font-medium text-primary">Pronto para envio manual:</p>
               {textoGerado && (canal === "whatsapp" || canal === "ambos") && (
                 <div className="space-y-2 rounded-lg border border-border bg-background/70 p-3">
                   <div className="flex items-center justify-between gap-2">
@@ -515,6 +502,16 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
                   <ExternalLink className="ml-auto h-4 w-4" />
                 </a>
               )}
+              <Button
+                type="button"
+                variant="default"
+                onClick={registrarEnvioManual}
+                disabled={registrando}
+                className="w-full gap-2"
+              >
+                {registrando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Já enviei no WhatsApp/E-mail, registrar contato
+              </Button>
             </div>
           )}
         </div>
@@ -533,17 +530,7 @@ export function OutreachModal({ lead, open, onClose }: OutreachModalProps) {
                 {canal === "ambos" && <Send className="h-4 w-4" />}
               </>
             )}
-            {enviando
-              ? modoLink
-                ? "Gerando links..."
-                : "Enviando..."
-              : modoLink
-              ? "Gerar link"
-              : canal === "whatsapp"
-              ? "Abrir WhatsApp"
-              : canal === "email"
-              ? "Abrir E-mail"
-              : "Enviar nos 2 canais"}
+            {enviando ? "Preparando..." : "Preparar mensagem e links"}
           </Button>
         </DialogFooter>
       </DialogContent>
